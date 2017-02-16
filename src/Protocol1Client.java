@@ -26,109 +26,107 @@ public class Protocol1Client {
 	static int portNo = 11337;
 	static boolean debug = true;
 
-	public static void main(String[] args) throws IOException, InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException {
+	public static void main(String[] args) throws IOException, InvalidKeyException, NoSuchAlgorithmException,
+			NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException {
 
-		if (debug) System.out.println("opening socket");
+		if (debug)
+			System.out.println("opening socket");
 		Socket socket = new Socket(ipAddy, portNo);
 
 		// Create an input and output stream
 		OutputStream out = socket.getOutputStream();
 		InputStream in = socket.getInputStream();
-		
-		//Protocol step 1: Write Connect Protocol 1 to server
-		if (debug) System.out.println("Writing data");
-		out.write(hexStringToByteArray("Connect Protocol 1"));
-		
-		//Protocol step 2: Recieve nonce from server
-		byte[] serverNonce = new byte[16];
-		in.read(serverNonce);
-		if (debug) System.out.println("Server nonce: " + byteArrayToHexString(serverNonce));
 
-		//Protocol step 3: Send back same nonce to server
+		// Protocol step 1: Write Connect Protocol 1 to server
 		if (debug)
-		System.out.println("Client Nonce: " + byteArrayToHexString(serverNonce));
-		out.write(serverNonce);
-		
-		// Protocol step 4
-		// We should receive the Client and Server Nonces encrypted with the session key
-		// Because we sent back the same nonce, this should be an array of zeroes
-		 byte[] message4 = new byte[32];
-		 in.read(message4);
-		 if (debug)
-		 System.out.println("Message 4: " + byteArrayToHexString(message4));
-		 
-		 //Protocol step 5
-		 // We should send the client and server nonces (same) encrypted with the
-		 //session key
-//		 byte[] message5pt = new byte[32];
-//		 System.arraycopy(serverNonce, 0, message5pt, 0, 16);
-//		 System.arraycopy(serverNonce, 0, message5pt, 16, 16);
-//		
-//		 byte[] keyBytes = xorBytes(serverNonce,serverNonce);
-//		 SecretKeySpec secretKeySpec = new SecretKeySpec(keyBytes, "AES");
-//		 Cipher decAEScipherSession = Cipher.getInstance("AES");
-//		 decAEScipherSession.init(Cipher.DECRYPT_MODE, secretKeySpec);
-//		 Cipher encAEScipherSession = Cipher.getInstance("AES");
-//		 encAEScipherSession.init(Cipher.ENCRYPT_MODE, secretKeySpec);
-//		
-//		 byte[] cipherTextM5 = encAEScipherSession.doFinal(message5pt);
-//		 if (debug) System.out.println("Sending M5pt:"+byteArrayToHexString(message5pt));
-//		 if (debug) System.out.println("M5ct:"+byteArrayToHexString(cipherTextM5));
-		 out.write(message4);
+			System.out.println("Writing data");
+		out.write("Connect Protocol 1".getBytes());
 
-		 //Protocol step 6
-		 // read the Secret Value sent by the server
-		 byte[] encSecretMessage = new byte[100];
-		 in.read(encSecretMessage);
-		 //byte[] secretMessage = decAEScipherSession.doFinal(encSecretMessage);
-		 if (debug) System.out.println(byteArrayToHexString(encSecretMessage));
-		 
-		if (debug) System.out.println("closing socket");
+		// Protocol step 2: Recieve nonce from server
+		byte[] serverNonce = new byte[32];
+		in.read(serverNonce);
+		if (debug)
+			System.out.println("Server nonce: " + byteArrayToHexString(serverNonce));
+
+		// Protocol step 3: Send back same nonce to server
+		if (debug)
+			System.out.println("Client Nonce: " + byteArrayToHexString(serverNonce));
+		out.write(serverNonce);
+
+		// Protocol step 4
+		// We should receive the Client and Server Nonces encrypted with the
+		// session key
+		// Because we sent back the same nonce, this should be an array of
+		// zeroes
+		byte[] message4 = new byte[48];
+		in.read(message4);
+		if (debug)
+			System.out.println("Message 4: " + byteArrayToHexString(message4));
+
+		// Protocol step 5
+		// We should send the server the same message we just recieved
+		out.write(message4);
+		
+		//Set up aes decryption with the known session key as the key
+		SecretKeySpec secretKeySpec = new SecretKeySpec(hexStringToByteArray("00000000000000000000000000000000"),
+				"AES");
+		Cipher decAEScipherSession = Cipher.getInstance("AES");
+		decAEScipherSession.init(Cipher.DECRYPT_MODE, secretKeySpec);
+
+		// Protocol step 6
+		// read the Secret Value sent by the server
+		byte[] encSecretMessage = new byte[224];
+		in.read(encSecretMessage);
+		byte[] secretMessage = decAEScipherSession.doFinal(encSecretMessage);
+		System.out.println(byteArrayToHexString(encSecretMessage));
+		String s = new String(secretMessage);
+		if (debug)
+			System.out.println("Message: " + s);
+
+		if (debug)
+			System.out.println("closing socket");
 		socket.close();
 
 		System.out.println("done");
 	}
-	
-	private static byte[] xorBytes (byte[] one, byte[] two) {
-		if (one.length!=two.length) {
-		    return null;
+
+	private static byte[] xorBytes(byte[] one, byte[] two) {
+		if (one.length != two.length) {
+			return null;
 		} else {
-		    byte[] result = new byte[one.length];
-		    for(int i=0;i<one.length;i++) {
-			result[i] = (byte) (one[i]^two[i]);
-		    }
-		    return result;
+			byte[] result = new byte[one.length];
+			for (int i = 0; i < one.length; i++) {
+				result[i] = (byte) (one[i] ^ two[i]);
+			}
+			return result;
 		}
-	    }
-	    
-	    private static String byteArrayToHexString(byte[] data) { 
+	}
+
+	private static String byteArrayToHexString(byte[] data) {
 		StringBuffer buf = new StringBuffer();
-		for (int i = 0; i < data.length; i++) { 
-		    int halfbyte = (data[i] >>> 4) & 0x0F;
-		    int two_halfs = 0;
-		    do { 
-			if ((0 <= halfbyte) && (halfbyte <= 9)) 
-			    buf.append((char) ('0' + halfbyte));
-			else 
-			    buf.append((char) ('a' + (halfbyte - 10)));
-			halfbyte = data[i] & 0x0F;
-		    } while(two_halfs++ < 1);
-		} 
+		for (int i = 0; i < data.length; i++) {
+			int halfbyte = (data[i] >>> 4) & 0x0F;
+			int two_halfs = 0;
+			do {
+				if ((0 <= halfbyte) && (halfbyte <= 9))
+					buf.append((char) ('0' + halfbyte));
+				else
+					buf.append((char) ('a' + (halfbyte - 10)));
+				halfbyte = data[i] & 0x0F;
+			} while (two_halfs++ < 1);
+		}
 		return buf.toString();
-	    } 
-	    
-	    private static byte[] hexStringToByteArray(String s) {
+	}
+
+	private static byte[] hexStringToByteArray(String s) {
 		int len = s.length();
 		byte[] data = new byte[len / 2];
 		for (int i = 0; i < len; i += 2) {
-		    data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
-					  + Character.digit(s.charAt(i+1), 16));
+			data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4) + Character.digit(s.charAt(i + 1), 16));
 		}
 		return data;
-	    }
+	}
 }
-
-
 
 // public void run() {
 // OutputStream outStream;
